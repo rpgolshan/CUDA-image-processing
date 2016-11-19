@@ -64,7 +64,8 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
                 (x + i >= width) || //right side OoB
                 (y + j < 0) || //top OoB
                 (y + j >= height)) //bot OoB
-                value = make_uint3(0,0,0);
+                //value = make_uint3(0,0,0);
+                continue;
             else { 
                 value = d_uintToRGB(d_img[loc + i + j * width]);
             }
@@ -93,10 +94,10 @@ double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel,
     checkCudaErrors(cudaDeviceSynchronize());
 //    checkCudaErrors(cudaBindTextureToArray(tex, d_array));
 
-        dim3 threadsPerBlock(16, 16);
-        dim3 numBlocks(width / threadsPerBlock.x, width/threadsPerBlock.y);
-        d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
-        checkCudaErrors(cudaDeviceSynchronize());
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
+    d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+    checkCudaErrors(cudaDeviceSynchronize());
 
     return 0;
 
