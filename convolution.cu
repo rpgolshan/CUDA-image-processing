@@ -9,18 +9,50 @@
 //texture<float, cudaTextureType2D, cudaReadModeElementType> texRef;
 
 
-/* must basic convolotion method in parallel
+/* 
+ * Converts a uint to a uint3, seperating RGB
+ * colors by every byte.
+ * Most significat to least significant:
+ * Red, Green, Blue
+ */
+__device__ uint3 d_uintToRGB(unsigned int orig)
+{
+    uint3 rgb;
+    rgb = make_uint3(orig & 0xff, (orig>>8)&0xff, (orig>>16)&0xff);
+    return rgb;
+}
+
+/*
+ * Converts a uint3 to an unsigned int
+ * Assumes each vector member correspond to RGB colors
+ * Truncates rgb colors bigger than 1 byte
+ */
+__device__ unsigned int d_rgbToUint(uint3 rgb)
+{
+    unsigned int total;
+    if (rgb.x > 0xff) rgb.x = 0xff;
+    if (rgb.y > 0xff) rgb.x = 0xff;
+    if (rgb.z > 0xff) rgb.x = 0xff;
+
+    total = (rgb.x & 0xff) + ((rgb.y & 0xff) << 8) + ((rgb.z & 0xff) << 16);
+    return total;
+}
+
+/* The most basic convolution method in parallel
+ * Does not take advantage of memory optimizations with a GPU
+ * Can be used with any (square) kernel filter
  * SLOW
+ * Each output pixel does radius^2 multiplications 
+ * T = O(radius^2)
+ * W = O(radius^2 * width * height)
  */
 __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height, int radius)
 {
-//    float scale = 1.0f / (float)((r << 1) + 1);
-//    int weightsum = 1;
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     unsigned int loc = x + (blockIdx.y*blockDim.y)*width + threadIdx.y*width;
     uint3 accumulation = make_uint3(0,0,0);
-    uint3 value = make_uint3(0, 0, 0);
+    uint3 value;
     float weight = 0.0f;
 
     if (x >= width || y >= height) return;
@@ -32,12 +64,9 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
                 (x + i >= width) || //right side OoB
                 (y + j < 0) || //top OoB
                 (y + j >= height)) //bot OoB
-               // value = 0;
-                return;
+                value = make_uint3(0,0,0);
             else { 
-                unsigned int t = d_img[loc + i + j * width];
-                //blue, green, red
-                value = make_uint3(t & 0xff, (t>>8)&0xff, (t>>16)&0xff);
+                value = d_uintToRGB(d_img[loc + i + j * width]);
             }
             float temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
             value.x *= temp;
@@ -53,13 +82,7 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
         accumulation.x =  accumulation.x/weight;
         accumulation.y =  accumulation.y/weight;
         accumulation.z =  accumulation.z/weight;
-        if (accumulation.x > 0xff) accumulation.x = 0xff;
-        if (accumulation.y > 0xff) accumulation.x = 0xff;
-        if (accumulation.z > 0xff) accumulation.x = 0xff;
-
-        unsigned int total = (accumulation.x & 0xff) + ((accumulation.y & 0xff) << 8) + ((accumulation.z & 0xff) << 16);
-        d_result[loc] = total;
-        printf("orig: %x new: %x ", d_img[loc], d_result[loc]);
+        d_result[loc] = d_rgbToUint(accumulation);
     }
 }
 
