@@ -8,6 +8,8 @@
 // 2D float texture
 //texture<float, cudaTextureType2D, cudaReadModeElementType> texRef;
 
+#define BLOCK_SIZE 16
+
 
 /* 
  * Converts a uint to a uint3, seperating RGB
@@ -87,6 +89,68 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
     }
 }
 
+/* The most basic convolution method in parallel
+ * Takes advantage of shared memory in a GPU 
+ * Can be used with any (square) kernel filter
+ * SLOW
+ * Each output pixel does radius^2 multiplications 
+ * T = O(radius^2)
+ * W = O(radius^2 * width * height)
+ */
+__global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height, int radius)
+{
+    __shared__ unsigned int data[BLOCK_SIZE][BLOCK_SIZE];
+
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+
+    x = threadIdx.x;
+    y = threadIdx.y;
+    int w = blockDim.x;
+    int h = blockDim.y;
+
+    // memory location in d_img
+    unsigned int loc = (blockIdx.x*blockDim.x + threadIdx.x) + (blockIdx.y*blockDim.y)*width + threadIdx.y*width;
+
+    uint3 accumulation = make_uint3(0,0,0);
+    uint3 value;
+    float weight = 0.0f;
+
+    data[threadIdx.x][threadIdx.y] = d_img[loc];
+    __syncthreads();
+
+    for (int i = -radius; i <= radius; i++) {
+        for (int j = -radius; j <= radius; j++) {
+            if ((x + i < 0) || //left side out of bounds
+                (x + i >= w) || //right side OoB
+                (y + j < 0) || //top OoB
+                (y + j >= h)) //bot OoB
+                //value = make_uint3(0,0,0);
+                continue;
+            else { 
+                value = d_uintToRGB(data[threadIdx.x + i][threadIdx.y + j]);
+            }
+            float temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
+            value.x *= temp;
+            value.y *= temp;
+            value.z *= temp;
+            weight += temp;
+            accumulation += value;
+        }
+    }
+    if (radius == 0) //i.e. original image
+        d_result[loc] = data[threadIdx.x][threadIdx.y];
+    else  {
+        accumulation.x =  accumulation.x/weight;
+        accumulation.y =  accumulation.y/weight;
+        accumulation.z =  accumulation.z/weight;
+        d_result[loc] = d_rgbToUint(accumulation);
+    }
+}
+
+
+
 double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height,
                  int radius)
 {
@@ -94,9 +158,10 @@ double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel,
     checkCudaErrors(cudaDeviceSynchronize());
 //    checkCudaErrors(cudaBindTextureToArray(tex, d_array));
 
-    dim3 threadsPerBlock(16, 16);
+    dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
-    d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+    //d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+    d_sharedSlowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
     checkCudaErrors(cudaDeviceSynchronize());
 
     return 0;
