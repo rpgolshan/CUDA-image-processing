@@ -152,7 +152,7 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
 
 
 double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height,
-                 int radius)
+                 int radius, int type)
 {
     // sync host and start computation timer_kernel
     checkCudaErrors(cudaDeviceSynchronize());
@@ -160,8 +160,14 @@ double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel,
 
     dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
-    //d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
-    d_sharedSlowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+    switch (type) {
+        case 0: 
+            d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+            break;
+        case 1:
+            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+            break;
+    }
     checkCudaErrors(cudaDeviceSynchronize());
 
     return 0;

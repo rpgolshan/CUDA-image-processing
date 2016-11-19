@@ -111,6 +111,7 @@ const char *sReference[] =
 
 const char *image_filename = "./data/part1pairs/sign_1.ppm";
 int filter = 1;
+int type = 0;
 int nthreads = 64;  // number of threads per block
 
 unsigned int width, height;
@@ -127,20 +128,22 @@ StopWatchInterface *timer = 0;
 // display results using OpenGL
 void display()
 {
-    sdkStartTimer(&timer);
 
     // execute filter, writing results to pbo
     unsigned int *d_result;
     checkCudaErrors(cudaGLMapBufferObject((void **)&d_result, pbo));
-    //gaussianFilterRGBA(d_img, d_result, d_temp, width, height, sigma, order, nthreads);
+    sdkResetTimer(&timer);
+    sdkStartTimer(&timer);
     switch (filter) {
         case 1: 
-            convolution(d_img, d_result, d_kernel, width, height, radius); 
+            convolution(d_img, d_result, d_kernel, width, height, radius, type); 
             break;
         case 0:
-            convolution(d_img, d_result, d_kernel, width, height, 0); 
+            convolution(d_img, d_result, d_kernel, width, height, 0, type); 
             break;
     }
+    sdkStopTimer(&timer);
+    printf("time taken: %f\n", sdkGetTimerValue(&timer));
 //    checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGLUnmapBufferObject(pbo));
 
@@ -171,7 +174,6 @@ void display()
     glDisable(GL_TEXTURE_2D);
     glutSwapBuffers();
 
-    sdkStopTimer(&timer);
 
     //computeFPS();
 }
@@ -248,12 +250,19 @@ void keyboard(unsigned char key, int x, int y)
         case '1':
             filter = 1;
             break;
+        case 'a':
+            type = 0;
+            break;
+        case 'b':
+            type = 1;
+            break;
 
         default:
             break;
     }
 
-    printf("radius = %d\n", radius);
+    printf("convolution func = %d           radius = %d\n", type, radius);
+
     glutPostRedisplay();
 }
 
@@ -286,7 +295,7 @@ void initCudaBuffers()
     checkCudaErrors(cudaMemcpy(d_img, h_img, size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
 
-//    sdkCreateTimer(&timer);
+    sdkCreateTimer(&timer);
 }
 
 
@@ -330,6 +339,7 @@ void initGL(int *argc, char **argv)
 
     printf("Press '+' and '-' to change filter width\n");
     printf("0, 1, 2 - change filter order\n");
+    printf("a = slow convolution, b = slow convolution w/ shared memory\n");
 
     if (!isGLVersionSupported(2,0) || !areGLExtensionsSupported("GL_ARB_vertex_buffer_object GL_ARB_pixel_buffer_object"))
     {
