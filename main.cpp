@@ -42,6 +42,8 @@
 #include <string.h>
 #include <math.h>
 
+#include "convolution.cuh"
+
 #define MAX(a,b) ((a > b) ? a : b)
 
 #define USE_SIMPLE_FILTER 0
@@ -49,6 +51,42 @@
 #define MAX_EPSILON_ERROR 5.0f
 #define THRESHOLD  0.15f
 
+
+float box[] =
+{
+  1, 1, 1,
+  1, 2, 1,
+  1, 1, 1
+};
+
+
+
+/*
+float box[] =
+{
+  0, 0, 1,
+  0, 0, 0,
+  1, 0, 0
+};
+*/
+
+
+/*
+ * identity matrix
+ */
+
+/*
+float box[] =
+{
+  0, 0, 0,
+  0, 1, 0,
+  0, 0, 0
+};
+
+*/
+
+int weight = 9;
+int radius = 1;
 /*
  * START OF NVIDIA CODE//
  */                    
@@ -71,15 +109,15 @@ const char *sReference[] =
     NULL
 };
 
-const char *image_filename = "lena.ppm";
-float sigma = 10.0f;
-int order = 0;
+const char *image_filename = "./data/part1pairs/sign_1.ppm";
+int filter = 1;
 int nthreads = 64;  // number of threads per block
 
 unsigned int width, height;
 unsigned int *h_img = NULL;
 unsigned int *d_img = NULL;
-unsigned int *d_temp = NULL;
+//unsigned int *d_result = NULL;
+float *d_kernel = NULL;
 
 GLuint pbo = 0;     // OpenGL pixel buffer object
 GLuint texid = 0;   // texture
@@ -95,6 +133,15 @@ void display()
     unsigned int *d_result;
     checkCudaErrors(cudaGLMapBufferObject((void **)&d_result, pbo));
     //gaussianFilterRGBA(d_img, d_result, d_temp, width, height, sigma, order, nthreads);
+    switch (filter) {
+        case 1: 
+            convolution(d_img, d_result, d_kernel, width, height, radius); 
+            break;
+        case 0:
+            convolution(d_img, d_result, d_kernel, width, height, 0); 
+            break;
+    }
+//    checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGLUnmapBufferObject(pbo));
 
     // load texture from pbo
@@ -139,7 +186,8 @@ void cleanup()
     sdkDeleteTimer(&timer);
 
     checkCudaErrors(cudaFree(d_img));
-    checkCudaErrors(cudaFree(d_temp));
+    checkCudaErrors(cudaFree(d_kernel));
+//    checkCudaErrors(cudaFree(d_result));
 
     //if (!runBenchmark)
     //{
@@ -155,6 +203,60 @@ void cleanup()
         }
     //}
 }
+
+void keyboard(unsigned char key, int x, int y)
+{
+    switch (key)
+    {
+        case 27:
+                glutDestroyWindow(glutGetWindow());
+                return;
+            break;
+
+        case '=':
+            radius+=1;
+            break;
+
+        case '-':
+            radius-=2;
+
+            if (radius < 0)
+            {
+                radius = 0;
+            }
+
+            break;
+
+        case '+':
+            radius+=1;
+            break;
+
+        case '_':
+            radius-=1;
+
+            if (radius < 0)
+            {
+                radius = 0;
+            }
+
+            break;
+
+        case '0':
+            filter = 0;
+            break;
+
+        case '1':
+            filter = 1;
+            break;
+
+        default:
+            break;
+    }
+
+    printf("radius = %d\n", radius);
+    glutPostRedisplay();
+}
+
 
 
 void reshape(int x, int y)
@@ -174,14 +276,17 @@ void reshape(int x, int y)
 void initCudaBuffers()
 {
     unsigned int size = width * height * sizeof(unsigned int);
+    unsigned int ksize =  (2*radius+1)*(2*radius+1) * sizeof(float);
 
     // allocate device memory
     checkCudaErrors(cudaMalloc((void **) &d_img, size));
-    checkCudaErrors(cudaMalloc((void **) &d_temp, size));
+    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
+//    checkCudaErrors(cudaMalloc((void **) &d_result, size));
 
     checkCudaErrors(cudaMemcpy(d_img, h_img, size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
 
-    sdkCreateTimer(&timer);
+//    sdkCreateTimer(&timer);
 }
 
 
@@ -212,9 +317,10 @@ void initGL(int *argc, char **argv)
     glutInitWindowSize(width, height);
     glutCreateWindow("CUDA image processing");
     glutDisplayFunc(display);
-    //glutKeyboardFunc(keyboard);
+    glutKeyboardFunc(keyboard);
     glutReshapeFunc(reshape);
-    glutIdleFunc(idle);
+    glutIdleFunc(NULL);
+    //glutIdleFunc(idle);
 
 #if defined (__APPLE__) || defined(MACOSX)
     atexit(cleanup);
@@ -282,8 +388,9 @@ int main(int argc, char **argv)
     }
     printf("\n ");
     */
-
     initCudaBuffers();
+//    convolution(d_img, d_result, d_kernel, width, height, radius); 
+
     initGLBuffers();
     glutMainLoop();
     exit(EXIT_SUCCESS);
