@@ -8,8 +8,7 @@
 // 2D float texture
 //texture<float, cudaTextureType2D, cudaReadModeElementType> texRef;
 
-#define BLOCK_SIZE 16
-
+#define BLOCK_SIZE 16 
 
 /* 
  * Converts a uint to a uint3, seperating RGB
@@ -99,39 +98,53 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
  */
 __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height, int radius)
 {
-    __shared__ unsigned int data[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ unsigned int data[BLOCK_SIZE+2][BLOCK_SIZE+2];
 
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
 
-    x = threadIdx.x;
-    y = threadIdx.y;
-    int w = blockDim.x;
-    int h = blockDim.y;
-
     // memory location in d_img
-    unsigned int loc = (blockIdx.x*blockDim.x + threadIdx.x) + (blockIdx.y*blockDim.y)*width + threadIdx.y*width;
+    const unsigned int loc = (blockIdx.x*blockDim.x + threadIdx.x) + (blockIdx.y*blockDim.y)*width + threadIdx.y*width;
 
     uint3 accumulation = make_uint3(0,0,0);
     uint3 value;
     float weight = 0.0f;
 
-    data[threadIdx.x][threadIdx.y] = d_img[loc];
+
+    int w = blockDim.x;
+    int h = blockDim.y;
+
+    /* to convolute the edges of a block, the shared memory must extend outwards of radius  */
+#pragma unroll
+    for (int i = -w; i <= w; i+= w) {
+#pragma unroll
+        for (int j = -h; j <= h; j+= h) {
+            int x0 = threadIdx.x + i;
+            int y0 = threadIdx.y + j;
+            if (x0 < -radius || 
+                x0 >= radius + w ||
+                y0 < -radius ||
+                y0 >= radius + h )
+                continue;
+            else {
+                int newLoc = loc + i + j*width;
+                if (newLoc < 0 || newLoc >= width*height)
+                    data[threadIdx.x + i + radius][threadIdx.y + j + radius] = 0;
+                else 
+                    data[threadIdx.x + i + radius][threadIdx.y + j + radius] = d_img[loc + (i) + (j)*width];
+            }
+        }
+        
+    }
+
     __syncthreads();
 
     for (int i = -radius; i <= radius; i++) {
         for (int j = -radius; j <= radius; j++) {
-            if ((x + i < 0) || //left side out of bounds
-                (x + i >= w) || //right side OoB
-                (y + j < 0) || //top OoB
-                (y + j >= h)) //bot OoB
-                //value = make_uint3(0,0,0);
-                continue;
-            else { 
-                value = d_uintToRGB(data[threadIdx.x + i][threadIdx.y + j]);
-            }
+            if (data[threadIdx.x + i + radius][threadIdx.y + j + radius] == 0) continue;
             float temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
+            value = d_uintToRGB(data[threadIdx.x + i + radius][threadIdx.y + j + radius]);
             value.x *= temp;
             value.y *= temp;
             value.z *= temp;
@@ -140,7 +153,7 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
         }
     }
     if (radius == 0) //i.e. original image
-        d_result[loc] = data[threadIdx.x][threadIdx.y];
+        d_result[loc] = data[threadIdx.x + radius][threadIdx.y + radius];
     else  {
         accumulation.x =  accumulation.x/weight;
         accumulation.y =  accumulation.y/weight;
