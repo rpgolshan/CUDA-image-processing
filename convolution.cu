@@ -91,14 +91,15 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, f
 /* The most basic convolution method in parallel
  * Takes advantage of shared memory in a GPU 
  * Can be used with any (square) kernel filter
- * SLOW
+ * FAST 
  * Each output pixel does radius^2 multiplications 
  * T = O(radius^2)
  * W = O(radius^2 * width * height)
  */
 __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height, int radius)
 {
-    __shared__ unsigned int data[BLOCK_SIZE+2][BLOCK_SIZE+2];
+    // Use a 1d array instead of 2D in order to coalesce memory access
+    extern __shared__ unsigned int data[];
 
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
@@ -130,9 +131,9 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
             else {
                 int newLoc = loc + i + j*width;
                 if (newLoc < 0 || newLoc >= width*height)
-                    data[threadIdx.x + i + radius][threadIdx.y + j + radius] = 0;
+                    data[threadIdx.x + i + radius + (threadIdx.y + j + radius)*(blockDim.x+radius*2)] = 0;
                 else 
-                    data[threadIdx.x + i + radius][threadIdx.y + j + radius] = d_img[loc + (i) + (j)*width];
+                    data[threadIdx.x + i + radius + (threadIdx.y + j + radius)*(blockDim.x+radius*2)] = d_img[loc + (i) + (j)*width];
             }
         }
         
@@ -142,9 +143,10 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
 
     for (int i = -radius; i <= radius; i++) {
         for (int j = -radius; j <= radius; j++) {
-            if (data[threadIdx.x + i + radius][threadIdx.y + j + radius] == 0) continue;
+            unsigned int t = data[threadIdx.x + i + radius + (threadIdx.y + j + radius)*(blockDim.x+radius*2)];
+            if (t == 0) continue;
             float temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
-            value = d_uintToRGB(data[threadIdx.x + i + radius][threadIdx.y + j + radius]);
+            value = d_uintToRGB(t);
             value.x *= temp;
             value.y *= temp;
             value.z *= temp;
@@ -153,7 +155,7 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
         }
     }
     if (radius == 0) //i.e. original image
-        d_result[loc] = data[threadIdx.x + radius][threadIdx.y + radius];
+        d_result[loc] = data[threadIdx.x + radius +(threadIdx.y + radius)*(blockDim.x+radius*2)];
     else  {
         accumulation.x =  accumulation.x/weight;
         accumulation.y =  accumulation.y/weight;
@@ -167,10 +169,9 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
 double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel, int width, int height,
                  int radius, int type)
 {
-    // sync host and start computation timer_kernel
     checkCudaErrors(cudaDeviceSynchronize());
-//    checkCudaErrors(cudaBindTextureToArray(tex, d_array));
 
+    // threadsPerBlock needs to be a multiple of 32 for proper coalesce
     dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
     switch (type) {
@@ -178,11 +179,10 @@ double convolution(unsigned int *d_img, unsigned int *d_result, float *d_kernel,
             d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
             break;
         case 1:
-            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+radius*2)*(BLOCK_SIZE+radius*2)*sizeof(unsigned int)>>>(d_img, d_result, d_kernel, width, height, radius);
             break;
     }
     checkCudaErrors(cudaDeviceSynchronize());
 
     return 0;
-
 }
