@@ -53,18 +53,16 @@
 
 
 
-
+/*
 float box[] =
 {
   1, 1, 1,
-  1, 2, 1,
+  1, 1, 1,
   1, 1, 1
 };
+*/
 
 
-
-
-/*
 float box[] =
 {
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -85,7 +83,7 @@ float box[] =
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
-*/
+
 
 
 /*
@@ -113,7 +111,7 @@ float box[] =
 */
 
 int weight = 9;
-int radius = 1;
+int radius = 8;
 /*
  * START OF NVIDIA CODE//
  */                    
@@ -283,7 +281,9 @@ void keyboard(unsigned char key, int x, int y)
         case 'b':
             type = 1;
             break;
-
+        case 'c':
+            type = 2;
+            break;
         default:
             break;
     }
