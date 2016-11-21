@@ -163,7 +163,7 @@ __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result,
 
     int3 accumulation = make_int3(0,0,0);
     int3 value;
-    float weight = 0.0f;
+    int weight = 0;
 
 
     int w = blockDim.x;
@@ -172,40 +172,29 @@ __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result,
 #pragma unroll 3
     for (int i = -w; i <= w; i+= w) {
         int x0 = threadIdx.x + i;
+        int newLoc = loc + i;
         if (x0 < -radius || 
-            x0 >= radius + w)
+            x0 >= radius + w ||
+            newLoc < 0 || 
+            newLoc >= width*height)
             continue;
-        else {
-            int newLoc = loc + i;
-            if (newLoc < 0 || newLoc >= width*height)
-                data[threadIdx.x + i + radius + (threadIdx.y)*(blockDim.x+(radius << 1))] = 0;
-            else 
-                data[threadIdx.x + i + radius + (threadIdx.y) *(blockDim.x+(radius << 1))] = d_img[newLoc];
-        }
-      
+        data[threadIdx.x + i + radius + (threadIdx.y) *(blockDim.x+(radius << 1))] = d_img[newLoc];
     }
 
     __syncthreads();
 
     for (int i = -radius; i <= radius; i++) {
         unsigned int t = data[threadIdx.x + i + radius + (threadIdx.y)*(blockDim.x+(radius << 1))];
-        if (t == 0) continue;
-        float temp = d_kernel[i + radius];
+        int temp = d_kernel[i + radius];
         value = d_uintToRGB(t);
-        value.x *= temp;
-        value.y *= temp;
-        value.z *= temp;
+        value *= temp;
         weight += temp;
         accumulation += value;
     }
-    if (radius == 0) //i.e. original image
-        d_result[loc] = data[threadIdx.x + radius + (threadIdx.y)*(blockDim.x+(radius << 1))];
-    else  {
-        accumulation.x =  accumulation.x/weight;
-        accumulation.y =  accumulation.y/weight;
-        accumulation.z =  accumulation.z/weight;
-        d_result[loc] = d_rgbToUint(accumulation);
-    }
+    accumulation.x =  accumulation.x/weight;
+    accumulation.y =  accumulation.y/weight;
+    accumulation.z =  accumulation.z/weight;
+    d_result[loc] = d_rgbToUint(accumulation);
 }
 
 /* VERY FAST convolution method in parallel 
@@ -238,40 +227,29 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int width, int heigh
 #pragma unroll 3
     for (int j = -h; j <= h; j+= h) {
         int y0 = threadIdx.y + j;
+        int newLoc = loc + j*width;
         if (y0 < -radius || 
-            y0 >= radius + h)
+            y0 >= radius + h ||
+            newLoc < 0 ||
+            newLoc >= width*height)
             continue;
-        else {
-            int newLoc = loc + j*width;
-            if (newLoc < 0 || newLoc >= width*height)
-                data[threadIdx.x + (threadIdx.y + j + radius)*(blockDim.x)] = 0;
-            else 
-                data[threadIdx.x + (threadIdx.y + j + radius)*(blockDim.x)] = d_result[newLoc];
-        }
-        
+            data[threadIdx.x + (threadIdx.y + j + radius)*(blockDim.x)] = d_result[newLoc];
     }
 
     __syncthreads();
 
     for (int j = -radius; j <= radius; j++) {
         unsigned int t = data[threadIdx.x + (threadIdx.y + j + radius)*(blockDim.x)];
-        if (t == 0) continue;
         float temp = d_kernel[(j + radius)*((radius << 1)+1)];
         value = d_uintToRGB(t);
-        value.x *= temp;
-        value.y *= temp;
-        value.z *= temp;
+        value *= temp;
         weight += temp;
         accumulation += value;
     }
-    if (radius == 0) //i.e. original image
-        d_result[loc] = data[threadIdx.x + (threadIdx.y + radius)*(blockDim.x)];
-    else  {
-        accumulation.x =  accumulation.x/weight;
-        accumulation.y =  accumulation.y/weight;
-        accumulation.z =  accumulation.z/weight;
-        d_result[loc] = d_rgbToUint(accumulation);
-    }
+    accumulation.x =  accumulation.x/weight;
+    accumulation.y =  accumulation.y/weight;
+    accumulation.z =  accumulation.z/weight;
+    d_result[loc] = d_rgbToUint(accumulation);
 }
 
 
