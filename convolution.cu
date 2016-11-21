@@ -5,8 +5,8 @@
 #include <helper_cuda.h>
 #include "convolution.cuh"
 
-// 2D float texture
-//texture<float, cudaTextureType2D, cudaReadModeElementType> texRef;
+// Kernel cannot have radius bigger than 15
+__constant__ int d_kernel[1024];
 
 #define BLOCK_SIZE 16 
 
@@ -50,14 +50,13 @@ __device__ __forceinline__ unsigned int d_rgbToUint(int3 rgb)
  * T = O(radius^2)
  * W = O(radius^2 * width * height)
  */
-__global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, int *d_kernel, int width, int height, int radius)
+__global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius, int weight)
 {
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     const unsigned int loc =  x + y*width;
     int3 accumulation = make_int3(0,0,0);
     int3 value;
-    int weight = 0;
 
     if (x >= width || y >= height) return;
     assert(x < width);
@@ -72,7 +71,6 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, i
             value = d_uintToRGB(d_img[loc + i + j * width]);
             int temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
             value *= temp;
-            weight += temp;
             accumulation += value;
         }
     }
@@ -90,7 +88,7 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, i
  * T = O(radius^2)
  * W = O(radius^2 * width * height)
  */
-__global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_result, int *d_kernel, int width, int height, int radius)
+__global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius, int weight)
 {
     // Use a 1d array instead of 2D in order to coalesce memory access
     extern __shared__ unsigned int data[];
@@ -104,8 +102,6 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
 
     int3 accumulation = make_int3(0,0,0);
     int3 value;
-    int weight = 0;
-
 
     int w = blockDim.x;
     int h = blockDim.y;
@@ -137,7 +133,6 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
             int temp = d_kernel[i + radius +  (j+radius)*(radius*2 + 1)];
             value = d_uintToRGB(t);
             value *= temp; 
-            weight += temp;
             accumulation += value;
         }
     }
@@ -154,7 +149,7 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
  * T = O(radius + radius)
  * W = O(radius * width * radius*height)
  */
-__global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result, int *d_kernel, int width, int height, int radius)
+__global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
 {
     // Use a 1d array instead of 2D in order to coalesce memory access
     extern __shared__ unsigned int data[];
@@ -220,7 +215,7 @@ __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result,
  * T = O(radius + radius)
  * W = O(radius * width * radius*height)
  */
-__global__ void d_sepColConvolution(unsigned int *d_result, int *d_kernel, int width, int height, int radius)
+__global__ void d_sepColConvolution(unsigned int *d_result, int width, int height, int radius)
 {
     // Use a 1d array instead of 2D in order to coalesce memory access
     extern __shared__ unsigned int data[];
@@ -261,7 +256,7 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int *d_kernel, int w
     for (int j = -radius; j <= radius; j++) {
         unsigned int t = data[threadIdx.x + (threadIdx.y + j + radius)*(blockDim.x)];
         if (t == 0) continue;
-        float temp = d_kernel[j + radius];
+        float temp = d_kernel[(j + radius)*(radius*2+1)];
         value = d_uintToRGB(t);
         value.x *= temp;
         value.y *= temp;
@@ -280,9 +275,8 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int *d_kernel, int w
 }
 
 
-//__constant__ int ddd[1024];
-double convolution(unsigned int *d_img, unsigned int *d_result, int *d_kernel, int width, int height,
-                 int radius, int type)
+double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, int width, int height,
+                 int radius, int type, int weight)
 {
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -290,20 +284,19 @@ double convolution(unsigned int *d_img, unsigned int *d_result, int *d_kernel, i
     dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
 
-//    checkCudaErrors(cudaMemcpyToSymbol(ddd, d_kernel, (radius*2+1)*(radius*2+1)*sizeof(int)));
-
-//    d_kernel = ddd;
+    //copy kernel to device memory
+    checkCudaErrors(cudaMemcpyToSymbol(d_kernel, h_kernel, (radius*2+1)*(radius*2+1)*sizeof(int)));
 
     switch (type) {
         case 0: 
-            d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, d_kernel, width, height, radius);
+            d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, width, height, radius, weight);
             break;
         case 1:
-            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+radius*2)*(BLOCK_SIZE+radius*2)*sizeof(unsigned int)>>>(d_img, d_result, d_kernel, width, height, radius);
+            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+radius*2)*(BLOCK_SIZE+radius*2)*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius, weight);
             break;
         case 2:
-            d_sepRowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+radius*2)*(BLOCK_SIZE)*sizeof(unsigned int)>>>(d_img, d_result, d_kernel, width, height, radius);
-            d_sepColConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE)*(BLOCK_SIZE+radius*2)*sizeof(unsigned int)>>>(d_result, d_kernel, width, height, radius);
+            d_sepRowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+radius*2)*(BLOCK_SIZE)*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius);
+            d_sepColConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE)*(BLOCK_SIZE+radius*2)*sizeof(unsigned int)>>>(d_result, width, height, radius);
             break;
     }
     checkCudaErrors(cudaDeviceSynchronize());

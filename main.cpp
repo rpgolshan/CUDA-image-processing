@@ -53,65 +53,102 @@
 
 
 
-/*
-float box[] =
-{
-  1, 1, 1,
-  1, 1, 1,
-  1, 1, 1
-};
-*/
 
-
-int box[] =
-{
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-};
-
-
-
-/*
-float box[] =
-{
-  0, 0, 1,
-  0, 0, 0,
-  1, 0, 0
-};
-*/
-
-
-/*
- * identity matrix
- */
-
-/*
-float box[] =
+// identity, r=1 w=1
+int k0[] =
 {
   0, 0, 0,
   0, 1, 0,
   0, 0, 0
 };
 
-*/
+// blur, r = 2 w = 13
+int k1[] = 
+{
+  0, 0, 1, 0, 0,
+  0, 1, 1, 1, 0,
+  1, 1, 1, 1, 1,
+  0, 1, 1, 1, 0,
+  0, 0, 1, 0, 0,
+};
 
-int weight = 9;
-int radius = 8;
+// motion bur, r=4 w=9
+int k2[] = 
+{
+  1, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 1, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 1, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 1, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 1, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 1, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 1, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 1, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 1,
+};
+
+
+// horiz edges, r=2 w=1
+int k3[] = 
+{
+   0,  0, -1,  0,  0,
+   0,  0, -1,  0,  0,
+   0,  0,  2,  0,  0,
+   0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,
+};
+
+// vertical edges, r=2 w=1
+int k4[] = 
+{
+   0,  0, -1,  0,  0,
+   0,  0, -1,  0,  0,
+   0,  0,  4,  0,  0,
+   0,  0, -1,  0,  0,
+   0,  0, -1,  0,  0,
+};
+
+// all edges, r=1 w=1
+int k5[] = 
+{
+  -1, -1, -1,
+  -1,  8, -1,
+  -1, -1, -1
+};
+
+// sharpen, r=1 w=1
+int k6[] = 
+{
+   0, -1,  0,
+  -1,  5, -1,
+   0, -1,  0
+};
+
+// super sharpen, r=1 w=1
+int k7[] = 
+{
+  -1, -1, -1,
+  -1,  9, -1,
+  -1, -1, -1
+};
+
+//emboss r=1, w=1
+int k8[] = 
+{
+  -2, -1,  0,
+  -1,  1,  1,
+   0,  1,  2
+};
+
+//mean aka box, r=1 w=9
+int k9[] = 
+{
+   1,  1,  1,
+   1,  1,  1,
+   1,  1,  1
+};
+
+int weight = 1;
+int radius = 1;
 /*
  * START OF NVIDIA CODE//
  */                    
@@ -135,9 +172,8 @@ const char *sReference[] =
 };
 
 const char *image_filename = "./data/part1pairs/sign_1.ppm";
-int filter = 1;
+int filter = 0;
 int type = 0;
-int nthreads = 64;  // number of threads per block
 
 unsigned int width, height;
 unsigned int *h_img = NULL;
@@ -161,10 +197,34 @@ void display()
     sdkStartTimer(&timer);
     switch (filter) {
         case 1: 
-            convolution(d_img, d_result, d_kernel, width, height, radius, type); 
+            convolution(d_img, d_result, k1, width, height, radius, type, weight); 
             break;
         case 0:
-            convolution(d_img, d_result, d_kernel, width, height, 0, type); 
+            convolution(d_img, d_result, k0, width, height, radius, type, weight); 
+            break;
+        case 2: 
+            convolution(d_img, d_result, k2, width, height, radius, type, weight); 
+            break;
+        case 3: 
+            convolution(d_img, d_result, k3, width, height, radius, type, weight); 
+            break;
+        case 4: 
+            convolution(d_img, d_result, k4, width, height, radius, type, weight); 
+            break;
+        case 5: 
+            convolution(d_img, d_result, k5, width, height, radius, type, weight); 
+            break;
+        case 6: 
+            convolution(d_img, d_result, k6, width, height, radius, type, weight); 
+            break;
+        case 7: 
+            convolution(d_img, d_result, k7, width, height, radius, type, weight); 
+            break;
+        case 8: 
+            convolution(d_img, d_result, k8, width, height, radius, type, weight); 
+            break;
+        case 9: 
+            convolution(d_img, d_result, k9, width, height, radius, type, weight); 
             break;
     }
     sdkStopTimer(&timer);
@@ -231,6 +291,7 @@ void cleanup()
     //}
 }
 
+const char *s = "identity";
 void keyboard(unsigned char key, int x, int y)
 {
     switch (key)
@@ -239,25 +300,19 @@ void keyboard(unsigned char key, int x, int y)
                 glutDestroyWindow(glutGetWindow());
                 return;
             break;
-
         case '=':
             radius+=1;
             break;
-
         case '-':
             radius-=2;
-
             if (radius < 0)
             {
                 radius = 0;
             }
-
             break;
-
         case '+':
             radius+=1;
             break;
-
         case '_':
             radius-=1;
 
@@ -270,10 +325,63 @@ void keyboard(unsigned char key, int x, int y)
 
         case '0':
             filter = 0;
+            weight = 1;
+            radius = 1;
+            s = "identity";
             break;
-
         case '1':
             filter = 1;
+            weight = 13;
+            radius = 2;
+            s = "blur";
+            break;
+        case '2':
+            filter = 2;
+            weight = 9;
+            radius = 4;
+            s = "motion blur";
+            break;
+        case '3':
+            filter = 3;
+            weight = 1;
+            radius = 2;
+            s = "detect horizontol edges";
+            break;
+        case '4':
+            filter = 4;
+            weight = 1;
+            radius = 2;
+            s = "detect vertical edges";
+            break;
+        case '5':
+            filter = 5;
+            weight = 1;
+            radius = 1;
+            s = "detect all edges";
+            break;
+        case '6':
+            filter = 6;
+            weight = 1;
+            radius = 1;
+            s = "sharpen";
+            break;
+        case '7':
+            filter = 7;
+            weight = 1;
+            radius = 1;
+            s = "super sharpen";
+            break;
+        case '8':
+            filter = 8;
+            weight = 1;
+            radius = 1;
+            s = "emboss";
+            break;
+        case '9':
+            filter = 9;
+            weight = 9;
+            radius = 1;
+            s = "mean (box) filter";
             break;
         case 'a':
             type = 0;
@@ -288,12 +396,12 @@ void keyboard(unsigned char key, int x, int y)
             break;
     }
 
-    printf("convolution func = %d           radius = %d\n", type, radius);
+    
+
+    printf("filter: %s   convolution func = %d  radius = %d\n", s, type, radius);
 
     glutPostRedisplay();
 }
-
-
 
 void reshape(int x, int y)
 {
@@ -316,12 +424,12 @@ void initCudaBuffers()
 
     // allocate device memory
     checkCudaErrors(cudaMalloc((void **) &d_img, size));
-    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
+//    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
 //    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
 //    checkCudaErrors(cudaMalloc((void **) &d_result, size));
 
     checkCudaErrors(cudaMemcpy(d_img, h_img, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
+//    checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
 //    checkCudaErrors(cudaMemcpyToDevice(ddd, box, ksize));
 
     sdkCreateTimer(&timer);
