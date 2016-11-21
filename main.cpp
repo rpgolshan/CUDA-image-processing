@@ -63,7 +63,7 @@ float box[] =
 */
 
 
-float box[] =
+int box[] =
 {
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -143,7 +143,7 @@ unsigned int width, height;
 unsigned int *h_img = NULL;
 unsigned int *d_img = NULL;
 //unsigned int *d_result = NULL;
-float *d_kernel = NULL;
+int *d_kernel = NULL;
 
 GLuint pbo = 0;     // OpenGL pixel buffer object
 GLuint texid = 0;   // texture
@@ -312,15 +312,17 @@ void reshape(int x, int y)
 void initCudaBuffers()
 {
     unsigned int size = width * height * sizeof(unsigned int);
-    unsigned int ksize =  (2*radius+1)*(2*radius+1) * sizeof(float);
+    unsigned int ksize =  (2*radius+1)*(2*radius+1) * sizeof(int);
 
     // allocate device memory
     checkCudaErrors(cudaMalloc((void **) &d_img, size));
     checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
+//    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
 //    checkCudaErrors(cudaMalloc((void **) &d_result, size));
 
     checkCudaErrors(cudaMemcpy(d_img, h_img, size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
+//    checkCudaErrors(cudaMemcpyToDevice(ddd, box, ksize));
 
     sdkCreateTimer(&timer);
 }
