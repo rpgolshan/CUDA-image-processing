@@ -139,12 +139,28 @@ int k8[] =
    0,  1,  2
 };
 
-//mean aka box, r=1 w=9
+//box filter, r=9(max) w=(r*2+1)^2
 int k9[] = 
 {
-   1,  1,  1,
-   1,  1,  1,
-   1,  1,  1
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+   1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
 
 int weight = 1;
@@ -177,11 +193,7 @@ void display()
     // execute filter, writing results to pbo
     unsigned int *d_result;
     checkCudaErrors(cudaGLMapBufferObject((void **)&d_result, pbo));
-    sdkResetTimer(&timer);
-    sdkStartTimer(&timer);
     convolution(d_img, d_result, k, width, height, radius, type, weight, iterations); 
-    sdkStopTimer(&timer);
-    printf("time taken: %f\n", sdkGetTimerValue(&timer));
 //    checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGLUnmapBufferObject(pbo));
 
@@ -348,24 +360,26 @@ void keyboard(unsigned char key, int x, int y)
             break;
         case '9':
             filter = 9;
-            weight = 9;
-            radius = 1;
+            radius = 9;
+            weight = ((radius<<1)+1)*((radius<<1)+1);
             k = k9;
-            s = "mean (box) filter";
+            s = "box filter (max radius 9)";
             break;
-        case 'a':
+        case 'q':
             type = 0;
             break;
-        case 'b':
+        case 'w':
             type = 1;
             break;
-        case 'c':
+        case 'e':
+            filter = 9;
             type = 2;
+            s = "fast box filter (max radius 9)";
             break;
-        case 'd':
-            filter = 0;
+        case 'r':
+            filter = 9;
             type = 3;
-            s = "fast box blur";
+            s = "fast box filter (independent of radiusm, no limit on radius)";
             break;
         default:
             break;

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <helper_cuda.h>
+#include <helper_functions.h>
 #include "convolution.cuh"
 
 // Kernel cannot have radius bigger than 15
@@ -220,7 +221,7 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int width, int heigh
 
     int3 accumulation = make_int3(0,0,0);
     int3 value;
-    float weight = 0.0f;
+    int weight = 0;
 
 
     int h = blockDim.y;
@@ -332,6 +333,7 @@ __global__ void d_boxFilterCol(unsigned int *d_img, unsigned int *d_result, int 
     }
 }
 
+extern StopWatchInterface *timer;
 double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, int width, int height,
                  int radius, int type, int weight, int iterations)
 {
@@ -345,6 +347,12 @@ double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, i
     if (radius < 15)
         checkCudaErrors(cudaMemcpyToSymbol(d_kernel, h_kernel, ((radius << 1)+1)*((radius << 1)+1)*sizeof(int)));
 
+    unsigned int *d_temp = NULL;
+    if (type == 3)
+        checkCudaErrors(cudaMalloc((void **) &d_temp, width*height*sizeof(unsigned int)));
+
+    sdkResetTimer(&timer);
+    sdkStartTimer(&timer);
     for (int i = 0; i < iterations; i++) {
         switch (type) {
             case 0: 
@@ -358,16 +366,16 @@ double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, i
                 d_sepColConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE)*(BLOCK_SIZE+(radius << 1))*sizeof(unsigned int)>>>(d_result, width, height, radius);
                 break;
             case 3:
-                unsigned int *d_temp = NULL;
-                checkCudaErrors(cudaMalloc((void **) &d_temp, width*height*sizeof(unsigned int)));
                 d_boxFilterRow<<< ceil((float)height/BLOCK_SIZE), BLOCK_SIZE>>>(d_img, d_temp, width, height, radius);
                 d_boxFilterCol<<< ceil((float)width/BLOCK_SIZE), BLOCK_SIZE>>>(d_temp, d_result, width, height, radius);
-                checkCudaErrors(cudaFree(d_temp));
                 break;
         }
         checkCudaErrors(cudaDeviceSynchronize());
         d_img = d_result;
     }
+    sdkStopTimer(&timer);
+    printf("time taken: %f\n", sdkGetTimerValue(&timer));
 
+    checkCudaErrors(cudaFree(d_temp));
     return 0;
 }
