@@ -42,6 +42,14 @@ __device__ __forceinline__ unsigned int d_rgbToUint(int3 rgb)
     return (rgb.x & 0xff) | ((rgb.y & 0xff) << 8) | ((rgb.z & 0xff) << 16);
 }
 
+__device__ __forceinline__ int3 d_divide(int3 orig, int op)
+{
+    orig.x = orig.x/op;
+    orig.y = orig.y/op;
+    orig.z = orig.z/op;
+    return orig;
+}
+
 /* The most basic convolution method in parallel
  * Does not take advantage of memory optimizations with a GPU
  * Can be used with any (square) kernel filter
@@ -74,9 +82,7 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, i
             accumulation += value;
         }
     }
-    accumulation.x =  accumulation.x/weight;
-    accumulation.y =  accumulation.y/weight;
-    accumulation.z =  accumulation.z/weight;
+    accumulation = d_divide(accumulation, weight);
     d_result[loc] = d_rgbToUint(accumulation);
 }
 
@@ -136,9 +142,7 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
             accumulation += value;
         }
     }
-    accumulation.x =  accumulation.x/weight;
-    accumulation.y =  accumulation.y/weight;
-    accumulation.z =  accumulation.z/weight;
+    accumulation = d_divide(accumulation, weight);
     d_result[loc] = d_rgbToUint(accumulation);
 }
 
@@ -191,9 +195,7 @@ __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result,
         weight += temp;
         accumulation += value;
     }
-    accumulation.x =  accumulation.x/weight;
-    accumulation.y =  accumulation.y/weight;
-    accumulation.z =  accumulation.z/weight;
+    accumulation = d_divide(accumulation, weight);
     d_result[loc] = d_rgbToUint(accumulation);
 }
 
@@ -246,9 +248,7 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int width, int heigh
         weight += temp;
         accumulation += value;
     }
-    accumulation.x =  accumulation.x/weight;
-    accumulation.y =  accumulation.y/weight;
-    accumulation.z =  accumulation.z/weight;
+    accumulation = d_divide(accumulation, weight);
     d_result[loc] = d_rgbToUint(accumulation);
 }
 
