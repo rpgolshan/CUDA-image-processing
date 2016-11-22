@@ -46,6 +46,19 @@ GLuint texid = 0;   // texture
 
 StopWatchInterface *timer = 0;
 
+void print_help() 
+{
+    printf("press:\n");
+    printf("\t\tq\t- Normal Convolution\n");
+    printf("\t\tw\t- Normal Convolution with Shared memory\n");
+    printf("\t\te\t- Fast Box Filter\n");
+    printf("\t\tr\t- Separable Box Filter\n");
+    printf("\t\tt\t- Separable Guassian Filter\n");
+    printf("\n\n");
+    printf("In q or w mode, press 1 - 9, 0 for crazy filters!");
+    printf("\n\n");
+}
+
 // display results using OpenGL
 void display()
 {
@@ -107,6 +120,7 @@ void cleanup()
 }
 
 const char *s = "identity";
+const char *s_type = "Normal convolution";
 int prev_type= 0;
 void keyboard(unsigned char key, int x, int y)
 {
@@ -211,27 +225,49 @@ void keyboard(unsigned char key, int x, int y)
             radius = 9;
             weight = ((radius<<1)+1)*((radius<<1)+1);
             k = k9;
-            s = "box filter (max radius 9)";
+            s = "box filter (max r=9)";
             type = prev_type;
             break;
         case 'q':
+            if (filter == 9) {
+                s = "box filter (max r=9)";
+                k = k9;
+                weight = ((radius<<1)+1)*((radius<<1)+1);
+            }
+            if (filter == 7) {
+                s = "guassian blur";
+                k = guass;
+                weight = 273;
+            }
             prev_type = 0;
             type = 0;
+            if (radius > 9) radius=9;
             break;
         case 'w':
+            if (filter == 9) {
+                s = "box filter (max r=9)";
+                k = k9;
+                weight = ((radius<<1)+1)*((radius<<1)+1);
+            }
+            if (filter == 7) {
+                s = "guassian blur";
+                k = guass;
+                weight = 273;
+            }
             prev_type = 1;
             type = 1;
+            if (radius > 9) radius=9;
             break;
         case 'e':
             filter = 9;
             type = 3;
-            s = "fast box filter (independent of radius, no limit on radius)";
+            s = "fast box filter";
             break;
         case 'r':
             filter = 9;
             type = 2;
             k = k9;
-            s = "separable box filter (max radius 9)";
+            s = "separable box filter";
             break;
         case 't':
             filter = 7;
@@ -241,10 +277,27 @@ void keyboard(unsigned char key, int x, int y)
             s = "separable guassian blur";
             break;
         default:
+            print_help();
             break;
     }
 
-    printf("filter: %s   convolution func: %d  radius: %d iterations:%d   ", s, type, radius, iterations);
+    switch (type) {
+        case 0:
+            s_type = "Normal";
+            break;
+        case 1:
+            s_type = "Normalw/ shared memory";
+            break;
+        case 2:
+            s_type = "Separable";
+            break;
+        case 3:
+            s_type = "Fast Box Filter";
+            break;
+    }
+
+
+    printf("filter: %-30s\tconvolution function: %-30s\tradius: %3d\titerations:%d   ", s, s_type, radius, iterations);
 
     glutPostRedisplay();
 }
