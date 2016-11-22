@@ -204,7 +204,7 @@ ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
 ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
 
 # Common includes and paths for CUDA
-INCLUDES  := -I/home/rob/NVIDIA_CUDA-8.0_Samples/common/inc
+INCLUDES  := -I$(CUDA_PATH)/samples/common/inc
 LIBRARIES :=
 
 ################################################################################
@@ -224,7 +224,9 @@ else
 endif
 
 # Gencode arguments
-SMS ?= 20 30 35 37 50 52 60
+#SMS ?= 20 30 35 37 50 52 60
+# 52 for GTX 980
+SMS = 52 
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
@@ -241,40 +243,12 @@ ifneq ($(HIGHEST_SM),)
 GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
 endif
 endif
-
-ifeq ($(SAMPLE_ENABLED),0)
-EXEC ?= @echo "[@]"
-endif
-
 ################################################################################
 
 # Target rules
 all: build
 
-#build: recursiveGaussian
-#
-#check.deps:
-#ifeq ($(SAMPLE_ENABLED),0)
-#	@echo "Sample will be waived due to the above missing dependencies"
-#else
-#	@echo "Sample is ready - all dependencies have been met"
-#endif
-#
-#recursiveGaussian.o:recursiveGaussian.cpp
-#	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
-#
-#recursiveGaussian_cuda.o:recursiveGaussian_cuda.cu
-#	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
-#
-#recursiveGaussian: recursiveGaussian.o recursiveGaussian_cuda.o
-#	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-#	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
-#	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
-#
-#run: build
-#	$(EXEC) ./recursiveGaussian
-#
-build: main
+build: convolution 
 
 main.o:main.cpp
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
@@ -282,13 +256,8 @@ main.o:main.cpp
 convolution.o:convolution.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-main: main.o  convolution.o
+convolution: main.o  convolution.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	#$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
-	#$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 clean:
 	rm -f main main.o convolution.o 
-	#rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/recursiveGaussian
-
-clobber: clean

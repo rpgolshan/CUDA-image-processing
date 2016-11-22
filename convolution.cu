@@ -1,3 +1,10 @@
+/*
+ * Created by Rob Golshan
+ * Demos common image filters using parallel gpu algorithms
+ * Algorithms based of convolutionSeperable.pdf in cuda samples
+ * and wjarosz_convolution_2001.pdf --> converted to parallel
+ */
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +50,10 @@ __device__ __forceinline__ unsigned int d_rgbToUint(int3 rgb)
     return (rgb.x & 0xff) | ((rgb.y & 0xff) << 8) | ((rgb.z & 0xff) << 16);
 }
 
+/*
+ * divides an int3 by an int
+ * Maybe faster to just multiply by float instead..
+ */
 __device__ __forceinline__ int3 d_divide(int3 orig, int op)
 {
     orig.x = orig.x/op;
@@ -90,7 +101,7 @@ __global__ void d_slowConvolution(unsigned int *d_img, unsigned int *d_result, i
 /* The most basic convolution method in parallel
  * Takes advantage of shared memory in a GPU 
  * Can be used with any (square) kernel filter
- * FAST 
+ * Faster than without shared memory 
  * Each output pixel does radius^2 multiplications 
  * T = O(radius^2)
  * W = O(radius^2 * width * height)
@@ -149,10 +160,10 @@ __global__ void d_sharedSlowConvolution(unsigned int *d_img, unsigned int *d_res
 
 /* VERY FAST convolution method in parallel 
  * Takes advantage of shared memory in a GPU 
- * Can be used with ONLY WITH SEPERABLE kernel filters
- * Each output pixel does radius^2 multiplications 
+ * Can be used with ONLY WITH SEPARABLE kernel filters
+ * Each output pixel does radius+radius multiplications 
  * T = O(radius + radius)
- * W = O(radius * width * radius*height)
+ * W = O(radius * width + radius*height)
  */
 __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
 {
@@ -205,7 +216,7 @@ __global__ void d_sepRowConvolution(unsigned int *d_img, unsigned int *d_result,
  * Can be used with ONLY WITH SEPERABLE kernel filters
  * Each output pixel does radius^2 multiplications 
  * T = O(radius + radius)
- * W = O(radius * width * radius*height)
+ * W = O(radius * width + radius*height)
  */
 __global__ void d_sepColConvolution(unsigned int *d_result, int width, int height, int radius)
 {
@@ -254,6 +265,12 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int width, int heigh
 }
 
 
+/*
+ *  Fast radius independent box filter
+ *  Do Rows followed by Columns
+ *  T = O(width + height)
+ *  W = O(width*height + width*height)
+ */
 __global__ void d_boxFilterRow(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
 {
     // memory location in d_img
@@ -293,6 +310,14 @@ __global__ void d_boxFilterRow(unsigned int *d_img, unsigned int *d_result, int 
     }
 }
 
+
+/*
+ *  Fast radius independent box filter
+ *  Do Rows followed by Columns
+ *  d_img should be d_result from the row filter
+ *  T = O(width + height)
+ *  W = O(width*height + width*height)
+ */
 __global__ void d_boxFilterCol(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
 {
     // memory location in d_img
@@ -334,6 +359,10 @@ __global__ void d_boxFilterCol(unsigned int *d_img, unsigned int *d_result, int 
 }
 
 extern StopWatchInterface *timer;
+
+/*
+ * look at main.cpp kerboard interrupts for descriptions on what type and kernels do
+ */
 double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, int width, int height,
                  int radius, int type, int weight, int iterations)
 {
@@ -341,6 +370,7 @@ double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, i
 
     // threadsPerBlock needs to be a multiple of 32 for proper coalesce
     dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
+    //numBlocks should probably be a multiple of warp size here for proper coalesce..
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
 
     //copy kernel to device memory

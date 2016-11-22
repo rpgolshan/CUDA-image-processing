@@ -1,31 +1,12 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
- *
- * Please refer to the NVIDIA end user license agreement (EULA) associated
- * with this source code for terms and conditions that govern your use of
- * this software. Any use, reproduction, disclosure, or distribution of
- * this software and related documentation outside the terms of the EULA
- * is strictly prohibited.
- *
+ * Created by Rob Golshan
+ * gl code and helper functions taken from NVIDIA sample code 
+ * Demos common image filters using parallel gpu algorithms
  */
-
-
-/*
- * This sample demonstrates how 2D convolutions
- * with very large kernel sizes
- * can be efficiently implemented
- * using FFT transformations.
- */
-
-
-// Include CUDA runtime and CUFFT
-#include <cufft.h>
 
 // OpenGL Graphics includes
 #include <helper_gl.h>
 #include <GL/freeglut.h>
-
-
 
 // CUDA includes and interop headers
 #include <cuda_runtime.h>
@@ -45,14 +26,10 @@
 #include "kernels.h"
 #include "convolution.cuh"
 
-
 int weight = 1;
 int radius = 1;
-/*
- * START OF NVIDIA CODE//
- */                    
 
-const char *image_filename = "./data/part1pairs/sign_1.ppm";
+const char *image_filename = "./data/lena.ppm";
 int filter = 0;
 int type = 0;
 unsigned int iterations = 1;
@@ -77,7 +54,6 @@ void display()
     unsigned int *d_result;
     checkCudaErrors(cudaGLMapBufferObject((void **)&d_result, pbo));
     convolution(d_img, d_result, k, width, height, radius, type, weight, iterations); 
-//    checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGLUnmapBufferObject(pbo));
 
     // load texture from pbo
@@ -106,9 +82,6 @@ void display()
 
     glDisable(GL_TEXTURE_2D);
     glutSwapBuffers();
-
-
-    //computeFPS();
 }
 
 void idle()
@@ -121,22 +94,16 @@ void cleanup()
     sdkDeleteTimer(&timer);
 
     checkCudaErrors(cudaFree(d_img));
-//    checkCudaErrors(cudaFree(d_kernel));
-//    checkCudaErrors(cudaFree(d_result));
+    if (pbo)
+    {
+        checkCudaErrors(cudaGLUnregisterBufferObject(pbo));
+        glDeleteBuffers(1, &pbo);
+    }
 
-    //if (!runBenchmark)
-    //{
-        if (pbo)
-        {
-            checkCudaErrors(cudaGLUnregisterBufferObject(pbo));
-            glDeleteBuffers(1, &pbo);
-        }
-
-        if (texid)
-        {
-            glDeleteTextures(1, &texid);
-        }
-    //}
+    if (texid)
+    {
+        glDeleteTextures(1, &texid);
+    }
 }
 
 const char *s = "identity";
@@ -151,7 +118,7 @@ void keyboard(unsigned char key, int x, int y)
             break;
         case '=':
         case '+':
-            if (type = 3)
+            if (type == 3)
                 radius++;
             else if (filter == 9)
                 radius >= 9? radius=9: radius++;
@@ -277,7 +244,7 @@ void keyboard(unsigned char key, int x, int y)
             break;
     }
 
-    printf("filter: %s   convolution func: %d  radius: %d iterations:%d\n", s, type, radius, iterations);
+    printf("filter: %s   convolution func: %d  radius: %d iterations:%d   ", s, type, radius, iterations);
 
     glutPostRedisplay();
 }
@@ -303,18 +270,9 @@ void initCudaBuffers()
 
     // allocate device memory
     checkCudaErrors(cudaMalloc((void **) &d_img, size));
-//    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
-//    checkCudaErrors(cudaMalloc((void **) &d_kernel, ksize));
-//    checkCudaErrors(cudaMalloc((void **) &d_result, size));
-
     checkCudaErrors(cudaMemcpy(d_img, h_img, size, cudaMemcpyHostToDevice));
-//    checkCudaErrors(cudaMemcpy(d_kernel, box, ksize, cudaMemcpyHostToDevice));
-//    checkCudaErrors(cudaMemcpyToDevice(ddd, box, ksize));
-
     sdkCreateTimer(&timer);
 }
-
-
 
 void initGLBuffers()
 {
@@ -344,14 +302,9 @@ void initGL(int *argc, char **argv)
     glutDisplayFunc(display);
     glutKeyboardFunc(keyboard);
     glutReshapeFunc(reshape);
-    glutIdleFunc(NULL);
-    //glutIdleFunc(idle);
+    glutIdleFunc(NULL); //IDLE here so its not just endlessly computing
 
-#if defined (__APPLE__) || defined(MACOSX)
-    atexit(cleanup);
-#else
     glutCloseFunc(cleanup);
-#endif
 
     printf("Press '+' and '-' to change filter width\n");
     printf("0, 1, 2 - change filter order\n");
@@ -363,11 +316,6 @@ void initGL(int *argc, char **argv)
         exit(EXIT_FAILURE);
     }
 }
-/* 
- * END OF NVIDIA CODE
- */
-
-
 
 int main(int argc, char **argv)
 {
@@ -396,6 +344,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    //PPM images only
     sdkLoadPPM4ub(image_path, (unsigned char **)&h_img, &width, &height);
 
     if (!h_img)
@@ -408,14 +357,7 @@ int main(int argc, char **argv)
     findCudaGLDevice(argc, (const char **)argv);
     printf("Loaded '%s', %d x %d pixels\n", image_path, width, height);
     
-    /*
-    for (int i = 0; i < width*height; i++) {
-        printf("%d, ", h_img[i]);
-    }
-    printf("\n ");
-    */
     initCudaBuffers();
-//    convolution(d_img, d_result, d_kernel, width, height, radius); 
 
     initGLBuffers();
     glutMainLoop();
