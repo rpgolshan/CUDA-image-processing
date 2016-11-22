@@ -163,6 +163,16 @@ int k9[] =
    1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
 
+// guassian blur, r=2 w=273
+int guass[] =
+{
+    1, 4, 7, 4, 1,
+    4, 16, 26, 16, 4,
+    7, 26, 41, 26, 7,
+    4, 16, 26, 16, 4,
+    1, 4, 7, 4, 1
+};
+
 int weight = 1;
 int radius = 1;
 /*
@@ -257,6 +267,7 @@ void cleanup()
 }
 
 const char *s = "identity";
+int prev_type= 0;
 void keyboard(unsigned char key, int x, int y)
 {
     switch (key)
@@ -266,31 +277,19 @@ void keyboard(unsigned char key, int x, int y)
                 return;
             break;
         case '=':
-            radius+=1;
+        case '+':
+            if (type = 3)
+                radius++;
+            else if (filter == 9)
+                radius >= 9? radius=9: radius++;
             break;
         case '-':
-            radius-=2;
-            if (radius < 0)
-            {
-                radius = 0;
-            }
-            break;
-        case '+':
-            radius+=1;
-            break;
         case '_':
-            radius-=1;
-
-            if (radius < 0)
-            {
-                radius = 0;
-            }
+            if (filter == 9)
+                radius <= 0? radius=0: radius--;
             break;
         case '[':
-            iterations-=1;
-            if (iterations < 0) {
-                iterations = 0;
-            }
+            iterations <= 1? iterations=1: iterations--;
             break;
         case ']':
             iterations+=1;
@@ -301,6 +300,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 1;
             k = k0;
             s = "identity";
+            type = prev_type;
             break;
         case '1':
             filter = 1;
@@ -308,6 +308,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 2;
             k = k1;
             s = "blur";
+            type = prev_type;
             break;
         case '2':
             filter = 2;
@@ -315,6 +316,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 4;
             k = k2;
             s = "motion blur";
+            type = prev_type;
             break;
         case '3':
             filter = 3;
@@ -322,6 +324,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 2;
             k = k3;
             s = "detect horizontol edges";
+            type = prev_type;
             break;
         case '4':
             filter = 4;
@@ -329,6 +332,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 2;
             k = k4;
             s = "detect vertical edges";
+            type = prev_type;
             break;
         case '5':
             filter = 5;
@@ -336,6 +340,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 1;
             k = k5;
             s = "detect all edges";
+            type = prev_type;
             break;
         case '6':
             filter = 6;
@@ -343,13 +348,15 @@ void keyboard(unsigned char key, int x, int y)
             radius = 1;
             k = k6;
             s = "sharpen";
+            type = prev_type;
             break;
         case '7':
             filter = 7;
-            weight = 1;
-            radius = 1;
-            k = k7;
-            s = "super sharpen";
+            weight = 273;
+            radius = 2;
+            k = guass;
+            s = "guassian blur";
+            type = prev_type;
             break;
         case '8':
             filter = 8;
@@ -357,6 +364,7 @@ void keyboard(unsigned char key, int x, int y)
             radius = 1;
             k = k8;
             s = "emboss";
+            type = prev_type;
             break;
         case '9':
             filter = 9;
@@ -364,28 +372,38 @@ void keyboard(unsigned char key, int x, int y)
             weight = ((radius<<1)+1)*((radius<<1)+1);
             k = k9;
             s = "box filter (max radius 9)";
+            type = prev_type;
             break;
         case 'q':
+            prev_type = 0;
             type = 0;
             break;
         case 'w':
+            prev_type = 1;
             type = 1;
             break;
         case 'e':
             filter = 9;
-            type = 2;
-            s = "fast box filter (max radius 9)";
+            type = 3;
+            s = "fast box filter (independent of radius, no limit on radius)";
             break;
         case 'r':
             filter = 9;
-            type = 3;
-            s = "fast box filter (independent of radiusm, no limit on radius)";
+            type = 2;
+            k = k9;
+            s = "separable box filter (max radius 9)";
+            break;
+        case 't':
+            filter = 7;
+            type = 2;
+            radius = 2;
+            k = guass;
+            s = "separable guassian blur";
             break;
         default:
             break;
     }
 
-    
     printf("filter: %s   convolution func: %d  radius: %d iterations:%d\n", s, type, radius, iterations);
 
     glutPostRedisplay();
