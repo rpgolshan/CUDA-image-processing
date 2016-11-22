@@ -152,34 +152,18 @@ int radius = 1;
 /*
  * START OF NVIDIA CODE//
  */                    
-// Define the files that are to be save and the reference images for validation
-const char *sOriginal[] =
-{
-    "lena_10.ppm",
-    "lena_14.ppm",
-    "lena_18.ppm",
-    "lena_22.ppm",
-    NULL
-};
-
-const char *sReference[] =
-{
-    "ref_10.ppm",
-    "ref_14.ppm",
-    "ref_18.ppm",
-    "ref_22.ppm",
-    NULL
-};
 
 const char *image_filename = "./data/part1pairs/sign_1.ppm";
 int filter = 0;
 int type = 0;
+unsigned int iterations = 1;
+
 
 unsigned int width, height;
 unsigned int *h_img = NULL;
 unsigned int *d_img = NULL;
 //unsigned int *d_result = NULL;
-int *d_kernel = NULL;
+int *k = k0;
 
 GLuint pbo = 0;     // OpenGL pixel buffer object
 GLuint texid = 0;   // texture
@@ -195,38 +179,7 @@ void display()
     checkCudaErrors(cudaGLMapBufferObject((void **)&d_result, pbo));
     sdkResetTimer(&timer);
     sdkStartTimer(&timer);
-    switch (filter) {
-        case 1: 
-            convolution(d_img, d_result, k1, width, height, radius, type, weight); 
-            break;
-        case 0:
-            convolution(d_img, d_result, k0, width, height, radius, type, weight); 
-            break;
-        case 2: 
-            convolution(d_img, d_result, k2, width, height, radius, type, weight); 
-            break;
-        case 3: 
-            convolution(d_img, d_result, k3, width, height, radius, type, weight); 
-            break;
-        case 4: 
-            convolution(d_img, d_result, k4, width, height, radius, type, weight); 
-            break;
-        case 5: 
-            convolution(d_img, d_result, k5, width, height, radius, type, weight); 
-            break;
-        case 6: 
-            convolution(d_img, d_result, k6, width, height, radius, type, weight); 
-            break;
-        case 7: 
-            convolution(d_img, d_result, k7, width, height, radius, type, weight); 
-            break;
-        case 8: 
-            convolution(d_img, d_result, k8, width, height, radius, type, weight); 
-            break;
-        case 9: 
-            convolution(d_img, d_result, k9, width, height, radius, type, weight); 
-            break;
-    }
+    convolution(d_img, d_result, k, width, height, radius, type, weight, iterations); 
     sdkStopTimer(&timer);
     printf("time taken: %f\n", sdkGetTimerValue(&timer));
 //    checkCudaErrors(cudaDeviceSynchronize());
@@ -273,7 +226,7 @@ void cleanup()
     sdkDeleteTimer(&timer);
 
     checkCudaErrors(cudaFree(d_img));
-    checkCudaErrors(cudaFree(d_kernel));
+//    checkCudaErrors(cudaFree(d_kernel));
 //    checkCudaErrors(cudaFree(d_result));
 
     //if (!runBenchmark)
@@ -320,67 +273,84 @@ void keyboard(unsigned char key, int x, int y)
             {
                 radius = 0;
             }
-
             break;
-
+        case '[':
+            iterations-=1;
+            if (iterations < 0) {
+                iterations = 0;
+            }
+            break;
+        case ']':
+            iterations+=1;
+            break;
         case '0':
             filter = 0;
             weight = 1;
             radius = 1;
+            k = k0;
             s = "identity";
             break;
         case '1':
             filter = 1;
             weight = 13;
             radius = 2;
+            k = k1;
             s = "blur";
             break;
         case '2':
             filter = 2;
             weight = 9;
             radius = 4;
+            k = k2;
             s = "motion blur";
             break;
         case '3':
             filter = 3;
             weight = 1;
             radius = 2;
+            k = k3;
             s = "detect horizontol edges";
             break;
         case '4':
             filter = 4;
             weight = 1;
             radius = 2;
+            k = k4;
             s = "detect vertical edges";
             break;
         case '5':
             filter = 5;
             weight = 1;
             radius = 1;
+            k = k5;
             s = "detect all edges";
             break;
         case '6':
             filter = 6;
             weight = 1;
             radius = 1;
+            k = k6;
             s = "sharpen";
             break;
         case '7':
             filter = 7;
             weight = 1;
             radius = 1;
+            k = k7;
             s = "super sharpen";
             break;
         case '8':
             filter = 8;
             weight = 1;
             radius = 1;
+            k = k8;
             s = "emboss";
             break;
         case '9':
             filter = 9;
             weight = 9;
             radius = 1;
+            k = k9;
             s = "mean (box) filter";
             break;
         case 'a':
@@ -392,13 +362,17 @@ void keyboard(unsigned char key, int x, int y)
         case 'c':
             type = 2;
             break;
+        case 'd':
+            filter = 0;
+            type = 3;
+            s = "fast box blur";
+            break;
         default:
             break;
     }
 
     
-
-    printf("filter: %s   convolution func = %d  radius = %d\n", s, type, radius);
+    printf("filter: %s   convolution func: %d  radius: %d iterations:%d\n", s, type, radius, iterations);
 
     glutPostRedisplay();
 }

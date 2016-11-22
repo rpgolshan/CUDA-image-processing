@@ -253,8 +253,87 @@ __global__ void d_sepColConvolution(unsigned int *d_result, int width, int heigh
 }
 
 
+__global__ void d_boxFilterRow(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
+{
+    // memory location in d_img
+    const unsigned int loc = (blockIdx.x*blockDim.x + threadIdx.x) * width;
+    if (loc > height*width) return;
+
+    d_img = d_img + loc;
+    d_result = d_result + loc;
+    int3 accumulation;
+    int bWeight = (radius<<1) + 1; //all values in kernel weighted equally
+    
+    //initial clamping of left value
+    accumulation = d_uintToRGB(d_img[0])*radius;
+    for (int i = 0; i < radius + 1; i++) {
+        accumulation += d_uintToRGB(d_img[i]); 
+    }
+    d_result[0] = d_rgbToUint(d_divide(accumulation, bWeight));
+
+    for (int i = 1; i < radius + 1; i++) {
+        accumulation += d_uintToRGB(d_img[i + radius]); 
+        accumulation -= d_uintToRGB(d_img[0]); //clamp left side
+        d_result[i] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+
+    //resuses previous computed value
+    for (int i = radius + 1; i < width - radius; i++) {
+        accumulation += d_uintToRGB(d_img[i + radius]); 
+        accumulation -= d_uintToRGB(d_img[i - radius - 1]); 
+        d_result[i] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+
+    for (int i = width - radius; i < width; i++){
+        //clamp right side
+        accumulation += d_uintToRGB(d_img[width - 1]); 
+        accumulation -= d_uintToRGB(d_img[i - radius - 1]); 
+        d_result[i] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+}
+
+__global__ void d_boxFilterCol(unsigned int *d_img, unsigned int *d_result, int width, int height, int radius)
+{
+    // memory location in d_img
+    const unsigned int loc = (blockIdx.x*blockDim.x + threadIdx.x);
+    if (loc >= width) return;
+
+    d_img = d_img + loc;
+    d_result = d_result + loc;
+    int3 accumulation;
+    int bWeight = (radius<<1) + 1; //all values in kernel weighted equally
+    
+
+    //initial clamping of left value
+    accumulation = d_uintToRGB(d_img[0])*radius;
+    for (int i = 0; i < radius + 1; i++) {
+        accumulation += d_uintToRGB(d_img[i * width]); 
+    }
+    d_result[0] = d_rgbToUint(d_divide(accumulation, bWeight));
+
+    for (int i = 1; i < radius + 1; i++) {
+        accumulation += d_uintToRGB(d_img[(i + radius) * width]); 
+        accumulation -= d_uintToRGB(d_img[0]); //clamp left side
+        d_result[i * width] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+
+    //resuses previous computed value
+    for (int i = radius + 1; i < height - radius; i++) {
+        accumulation += d_uintToRGB(d_img[(i + radius)*width]); 
+        accumulation -= d_uintToRGB(d_img[(i - radius)*width - width]); 
+        d_result[i * width] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+
+    for (int i = height - radius; i < height; i++){
+        //clamp right side
+        accumulation += d_uintToRGB(d_img[(height - 1)*width]); 
+        accumulation -= d_uintToRGB(d_img[(i - radius)*width - width]); 
+        d_result[i * width] = d_rgbToUint(d_divide(accumulation, bWeight));
+    }
+}
+
 double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, int width, int height,
-                 int radius, int type, int weight)
+                 int radius, int type, int weight, int iterations)
 {
     checkCudaErrors(cudaDeviceSynchronize());
 
@@ -263,21 +342,32 @@ double convolution(unsigned int *d_img, unsigned int *d_result, int *h_kernel, i
     dim3 numBlocks(ceil((float)width / threadsPerBlock.x), ceil((float)height/threadsPerBlock.y));
 
     //copy kernel to device memory
-    checkCudaErrors(cudaMemcpyToSymbol(d_kernel, h_kernel, ((radius << 1)+1)*((radius << 1)+1)*sizeof(int)));
+    if (radius < 15)
+        checkCudaErrors(cudaMemcpyToSymbol(d_kernel, h_kernel, ((radius << 1)+1)*((radius << 1)+1)*sizeof(int)));
 
-    switch (type) {
-        case 0: 
-            d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, width, height, radius, weight);
-            break;
-        case 1:
-            d_sharedSlowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+(radius << 1))*(BLOCK_SIZE+(radius << 1))*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius, weight);
-            break;
-        case 2:
-            d_sepRowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+(radius << 1))*(BLOCK_SIZE)*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius);
-            d_sepColConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE)*(BLOCK_SIZE+(radius << 1))*sizeof(unsigned int)>>>(d_result, width, height, radius);
-            break;
+    for (int i = 0; i < iterations; i++) {
+        switch (type) {
+            case 0: 
+                d_slowConvolution<<< numBlocks, threadsPerBlock>>>(d_img, d_result, width, height, radius, weight);
+                break;
+            case 1:
+                d_sharedSlowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+(radius << 1))*(BLOCK_SIZE+(radius << 1))*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius, weight);
+                break;
+            case 2:
+                d_sepRowConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE+(radius << 1))*(BLOCK_SIZE)*sizeof(unsigned int)>>>(d_img, d_result, width, height, radius);
+                d_sepColConvolution<<< numBlocks, threadsPerBlock, (BLOCK_SIZE)*(BLOCK_SIZE+(radius << 1))*sizeof(unsigned int)>>>(d_result, width, height, radius);
+                break;
+            case 3:
+                unsigned int *d_temp = NULL;
+                checkCudaErrors(cudaMalloc((void **) &d_temp, width*height*sizeof(unsigned int)));
+                d_boxFilterRow<<< ceil((float)height/BLOCK_SIZE), BLOCK_SIZE>>>(d_img, d_temp, width, height, radius);
+                d_boxFilterCol<<< ceil((float)width/BLOCK_SIZE), BLOCK_SIZE>>>(d_temp, d_result, width, height, radius);
+                checkCudaErrors(cudaFree(d_temp));
+                break;
+        }
+        checkCudaErrors(cudaDeviceSynchronize());
+        d_img = d_result;
     }
-    checkCudaErrors(cudaDeviceSynchronize());
 
     return 0;
 }
